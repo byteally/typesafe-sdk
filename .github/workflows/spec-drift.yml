@@ -73,7 +73,7 @@ jobs:
             echo "See MAINTAINING.md for how to update the bindings."
           } >> "$summary"
 
-      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-pull-request@v8
         if: steps.sync.outputs.changed == 'true'
         with:
           # A token other than GITHUB_TOKEN lets the pull request trigger CI.
