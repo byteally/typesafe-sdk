@@ -1,0 +1,385 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
+
+-- |
+-- Module      : TypeSafe.Tutorial
+-- Description : A guided tour of the TypeSafe SDK
+-- Copyright   : (c) 2026 byteally
+-- License     : BSD-3-Clause
+--
+-- This module contains no code; it is a tutorial. The examples assume
+--
+-- @
+-- {-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, LambdaCase, OverloadedStrings #-}
+--
+-- import Data.Aeson ((.=))
+-- import Data.Text (Text)
+-- import GHC.Generics (Generic)
+-- import TypeSafe
+-- @
+--
+-- Complete, runnable programs are in the @examples@ directory of the
+-- repository.
+module TypeSafe.Tutorial
+  ( -- * 1. What TypeSafe does
+    -- $what
+
+    -- * 2. A client
+    -- $client
+
+    -- * 3. The first question
+    -- $first
+
+    -- * 4. Choosing a question type
+    -- $types
+
+    -- * 5. Options and levels are types
+    -- $options
+
+    -- * 6. Many questions, one request
+    -- $many
+
+    -- * 7. Structured state
+    -- $state
+
+    -- * 8. Acting on confidence
+    -- $confidence
+
+    -- * 9. Combining scores in code
+    -- $composite
+
+    -- * 10. When a question depends on an answer
+    -- $dependent
+
+    -- * 11. Errors and retries
+    -- $errors
+
+    -- * 12. Models
+    -- $models
+
+    -- * 13. Testing code that uses the SDK
+    -- $testing
+
+    -- * 14. When the API grows
+    -- $evolution
+  ) where
+
+import TypeSafe
+
+-- $what
+--
+-- TypeSafe's System One models make fast, structured judgments. You send a
+-- /state/ (the content to judge: text, a record, a conversation) and a set of
+-- named /questions/. Each question comes back as a typed answer, never as
+-- prose, so the calling code stays in control:
+--
+-- * a 'noul' asks /is this true?/ and returns a 'Probability';
+-- * a 'choice' asks /which of these options?/ and returns one of the options
+--   you offered, with a probability for each and a 'Confidence';
+-- * a 'score' asks /which level of this rubric?/ and returns an expected
+--   level, a probability for each level and a 'Confidence'.
+--
+-- Ask for judgments a knowledgeable person makes in a second, and compose the
+-- answers in Haskell. See <https://docs.typesafe.ai/concepts/system-one>.
+
+-- $client
+--
+-- Create an API key in the TypeSafe console and export it:
+--
+-- > export TYPESAFE_API_KEY=...
+--
+-- Then create one 'Client' for the whole program. It is thread-safe and keeps
+-- a pool of connections, so share it rather than creating one per call.
+--
+-- @
+-- client <- 'newClientFromEnv'
+-- @
+--
+-- 'newClientFromEnv' also reads @TYPESAFE_BASE_URL@ and
+-- @TYPESAFE_DEFAULT_MODEL@. To configure the client in code instead:
+--
+-- @
+-- key <- either throwIO pure ('mkApiKey' keyFromVault)
+-- client <-
+--   'newClient'
+--     ('defaultClientConfig' key)
+--       { 'configTimeout' = Just 5
+--       , 'configRetryPolicy' = 'defaultRetryPolicy' {'retryMaxRetries' = 4}
+--       , 'configLogger' = 'stderrLogger'
+--       }
+-- @
+--
+-- If your application already has an @http-client@ 'Manager' (for example
+-- one shared with servant-client), pass it to 'newClientWith'.
+
+-- $first
+--
+-- A call is a value describing a request. 'send' runs it:
+--
+-- @
+-- result <-
+--   'send' client $
+--     'systemOne' \"Help! My payouts have been failing for 3 days.\" $
+--       'ask' \"is_urgent\" ('noul' \"Does this convey urgency?\")
+--
+-- print ('noulProbability' ('evaluationAnswers' result))   -- 0.95
+-- print ('evaluationModel' result)                       -- \"jev-1.13.0\"
+-- print ('usageInputTokens' ('evaluationUsage' result))    -- 296
+-- @
+--
+-- The id passed to 'ask' (@\"is_urgent\"@) only matches the answer to its
+-- question. It is not shown to the model, so put the whole question in the
+-- instructions.
+
+-- $types
+--
+-- Pick the type whose answer your code can act on directly
+-- (<https://docs.typesafe.ai/primitives>):
+--
+-- * __Noul__ for a clean yes\/no condition, where the probability itself is
+--   useful: \"Does the customer request a refund?\". 'noulWith' also says
+--   what a yes and a no mean.
+--
+-- * __Choice__ for one of a known set of unordered options: routing to a
+--   department, classifying a document. Add an @other@ option when the list
+--   might not cover every input.
+--
+-- * __Score__ for a position on a spectrum that you can describe level by
+--   level: severity, frustration, skill.
+--
+-- A Noul of 0.5 means the model is unsure, not that something is \"half
+-- true\". To measure how much, use a Score.
+
+-- $options
+--
+-- Choice options and Score levels are ordinary Haskell types. Derive the
+-- classes for an enumeration:
+--
+-- @
+-- data Department = Billing | Technical | Sales
+--   deriving stock (Show, Eq, Generic)
+--   deriving anyclass ('ChoiceOption')
+--
+-- data Frustration = Calm | Frustrated | VeryAngry
+--   deriving stock (Show, Eq, Generic)
+--   deriving anyclass ('ScoreLevel')
+-- @
+--
+-- The answer to @'choice' \"Which team should handle this?\"@ is then a
+-- @'Choice' Department@, and 'choiceSelected' can only be one of the three
+-- constructors: an option the model was not offered is reported as an error
+-- ('UnknownOption'), never passed to your code.
+--
+-- Constructors are sent in snake case (@billing@) for options and as words
+-- (@very angry@) for levels. Descriptions make the model far more accurate,
+-- so write them for anything that is not obvious from the name:
+--
+-- @
+-- instance 'ChoiceOption' Department where
+--   'optionDescription' = Just . \\case
+--     Billing -> \"Payments, invoicing, refunds\"
+--     Technical -> \"Bugs, outages, integrations\"
+--     Sales -> \"Pricing, upgrades, new accounts\"
+--
+-- instance 'ScoreLevel' Frustration where
+--   'levelDescription' = \\case
+--     Calm -> \"Calm, just stating facts\"
+--     Frustrated -> \"Frustrated but civil\"
+--     VeryAngry -> \"Very angry, strong language\"
+-- @
+--
+-- When the options are only known at run time, such as a catalogue from a
+-- database, use 'choiceBy' and 'scoreBy', or 'scoreRubric' for a rubric of
+-- plain descriptions:
+--
+-- @
+-- skill :: NonEmpty Skill -> 'Question' ('Choice' Skill)
+-- skill = 'choiceBy' skillName (Just . 'contentText' . skillSummary) \"Which skill fits the request?\"
+-- @
+
+-- $many
+--
+-- Every question in a request sees the same state and is evaluated in
+-- parallel, so extra questions barely change latency and cost only their own
+-- tokens. Ask everything you might need in one request
+-- (<https://docs.typesafe.ai/patterns/fan-out>) and let the code ignore what
+-- it does not use.
+--
+-- 'Questions' is an 'Applicative'. Describe the record you want and the
+-- questions that fill it:
+--
+-- @
+-- data Triage = Triage
+--   { department :: 'Choice' Department
+--   , urgent :: 'Noul'
+--   , frustration :: 'Score' Frustration
+--   }
+--
+-- triage :: 'Questions' Triage
+-- triage =
+--   Triage
+--     \<$\> 'ask' \"department\" ('choice' \"Which team should handle this?\")
+--     \<*\> 'ask' \"is_urgent\" ('noul' \"Does this convey urgency?\")
+--     \<*\> 'ask' \"frustration\" ('score' \"How frustrated is the customer?\")
+--
+-- result <- 'send' client ('systemOne' ticketText triage)
+-- @
+--
+-- Questions generated from data are one 'traverse' away. This scores every
+-- passage of a search result in a single request:
+--
+-- @
+-- relevance :: Text -> [Text] -> 'Questions' [(Text, 'Noul')]
+-- relevance query passages =
+--   for (zip [0 :: Int ..] passages) $ \\(i, passage) ->
+--     (,) passage
+--       \<$\> 'ask'
+--         ('QuestionId' (\"passage_\" <> Text.pack (show i)))
+--         ('noul' ('contentObject' [\"query\" .= query, \"passage\" .= passage, \"question\" .= (\"Does \`passage\` answer \`query\`?\" :: Text)]))
+-- @
+--
+-- Ids must be distinct within a request; a clash is reported as
+-- 'DuplicateQuestionId' before anything is sent.
+
+-- $state
+--
+-- The state can be a string or structured JSON. Structure helps: questions
+-- can point at a field by its path, in backticks
+-- (<https://docs.typesafe.ai/concepts/state>).
+--
+-- @
+-- state :: 'Content'
+-- state =
+--   'contentObject'
+--     [ \"ticket\" .= ticket               -- any ToJSON value
+--     , \"refund_policy\" .= policyText
+--     ]
+--
+-- refundRequested :: 'Question' 'Noul'
+-- refundRequested = 'noul' \"Does \`ticket.messages[0].text\` request a refund?\"
+-- @
+--
+-- Instructions and descriptions accept structure too, which keeps long
+-- context out of the question sentence
+-- (<https://docs.typesafe.ai/primitives/advanced>).
+
+-- $confidence
+--
+-- Choice and Score answers carry a 'Confidence' besides their probabilities.
+-- The answer says /what/; the confidence says /whether to act on it/
+-- (<https://docs.typesafe.ai/patterns/confidence-routing>):
+--
+-- @
+-- route :: 'Choice' Department -> Action
+-- route answer
+--   | 'confidence' answer >= 0.8 = Assign ('choiceSelected' answer)
+--   | otherwise = SendToHuman ('rankedChoices' answer)
+-- @
+--
+-- Tune thresholds on your own data, and pin the model version you tuned
+-- them against (see "12. Models").
+
+-- $composite
+--
+-- Split a complex judgment into atomic scores and combine them with weights
+-- that live in code (<https://docs.typesafe.ai/patterns/composite-scoring>).
+-- 'normalizedScore' puts rubrics of any length on a 0–1 scale:
+--
+-- @
+-- priority :: 'Questions' Double
+-- priority =
+--   (\\sev fru inf -> 0.5 * 'normalizedScore' sev + 0.3 * 'normalizedScore' fru + 0.2 * 'normalizedScore' inf)
+--     \<$\> 'ask' \"severity\" ('score' \@Severity \"How severe is the bug?\")
+--     \<*\> 'ask' \"frustration\" ('score' \@Frustration \"How frustrated is the customer?\")
+--     \<*\> 'ask' \"info\" ('score' \@Detail \"How much does the report give an engineer to work with?\")
+-- @
+--
+-- When priorities change, change the weights, not the prompts.
+
+-- $dependent
+--
+-- Questions in a request are independent: one answer is not context for
+-- another. That is why 'Questions' is an 'Applicative' and not a 'Monad';
+-- the types cannot express a question that depends on an answer of the same
+-- request.
+--
+-- When the next question really depends on an answer, because you need it
+-- to fetch more data or to decide which options to offer, make a second
+-- request:
+--
+-- @
+-- category <- 'evaluationAnswers' \<$\> 'send' client ('systemOne' doc ('ask' \"category\" ('choice' \"Which category?\")))
+-- let subcategories = subcategoriesOf ('choiceSelected' category)
+-- detail <- 'send' client ('systemOne' doc ('ask' \"sub\" ('choiceBy' name (const Nothing) \"Which subcategory?\" subcategories)))
+-- @
+--
+-- If the second request's questions could have been asked against the
+-- original state, ask them in the first request instead.
+
+-- $errors
+--
+-- 'send' throws a 'TypeSafeError'; 'sendEither' returns it. The constructors
+-- separate what callers usually handle differently:
+--
+-- @
+-- 'sendEither' client call >>= \\case
+--   Right result -> use result
+--   Left ('InvalidRequest' problem) -> bug problem           -- nothing was sent
+--   Left ('ServiceError' e) -> case 'apiErrorKind' e of
+--     'Unauthorized' -> checkTheKey
+--     'RateLimited' -> backOff                                -- already retried
+--     _ -> report ('apiErrorMessage' e) ('apiErrorRequestId' e)
+--   Left ('ConnectionError' _) -> networkTrouble
+--   Left ('ResponseError' e) -> report ('responseErrorProblem' e) ('responseErrorRequestId' e)
+-- @
+--
+-- Rate limiting (429), overload (529), other 5xx statuses, timeouts and
+-- connection failures are retried with exponential backoff before an error
+-- is reported, honouring the server's @Retry-After@. Adjust the policy per
+-- client ('configRetryPolicy') or per call ('withRetryPolicy'); see
+-- "TypeSafe.Retry".
+--
+-- Include 'apiErrorRequestId' when you contact TypeSafe support.
+
+-- $models
+--
+-- Calls use 'jevLatest' unless the client or the call says otherwise. An
+-- alias moves when a new model ships, so if you have tuned thresholds, pin a
+-- version:
+--
+-- @
+-- 'send' client ('withModel' \"jev-1.13.0\" ('systemOne' state triage))
+-- @
+--
+-- 'evaluationModel' always reports the versioned model that answered.
+-- 'listModels' returns the names available to your account.
+
+-- $testing
+--
+-- Calls are values, so the code that builds them can be tested without a
+-- network. 'renderCall' shows exactly what would be sent, and
+-- 'parseResponse' decodes a recorded response:
+--
+-- @
+-- let call = 'systemOne' ticket triage
+-- 'renderCall' ('CallDefaults' 'jevLatest' []) call    -- the HTTP request
+-- 'parseResponse' call ('HttpResponse' status200 [] recordedBody)
+-- @
+--
+-- For higher-level tests, abstract over sending in your own code, for
+-- example with a record of functions or an effect, and interpret calls with
+-- 'parseResponse' over canned responses.
+
+-- $evolution
+--
+-- The SDK keeps working as the API gains features:
+--
+-- * unknown fields in responses are ignored;
+-- * answers of an unknown type are kept (see 'TypeSafe.Wire.AnswerOther' and
+--   'evaluationResponse');
+-- * 'withExtraBody' sends request fields the SDK does not know yet;
+-- * 'otherQuestion' sends a new question type and decodes its answer with
+--   your own 'Data.Aeson.FromJSON' instance.
+--
+-- Prefer upgrading the SDK once it supports the feature properly.
+-- 'apiSpecVersion' is the version of the API specification the installed
+-- SDK was checked against.
