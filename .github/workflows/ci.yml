@@ -25,7 +25,7 @@ jobs:
           - os: windows-latest
             ghc: "9.12"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: haskell-actions/setup@v2
         id: setup
@@ -56,7 +56,7 @@ jobs:
     name: Examples in the documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: haskell-actions/setup@v2
         id: setup
@@ -87,7 +87,7 @@ jobs:
     name: Hackage readiness
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: haskell-actions/setup@v2
         id: setup

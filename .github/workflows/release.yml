@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: hackage
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: haskell-actions/setup@v2
         id: setup
