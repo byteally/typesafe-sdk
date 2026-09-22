@@ -48,10 +48,38 @@ opens or updates the `api-spec-update` pull request. The description lists
 what was added and removed, and the conformance tests that fail against the
 new specification.
 
-Pull requests opened with the default `GITHUB_TOKEN` do not trigger other
-workflows. To have CI run on them, add a fine-grained personal access token
-with *contents* and *pull requests* write access as the `SPEC_SYNC_TOKEN`
-repository secret.
+The workflow opens the pull request with a GitHub App token, so that CI runs
+on it and a bot account is its author. Pull requests opened with the default
+`GITHUB_TOKEN` do not trigger other workflows. Without the app, the workflow
+still runs, but falls back to `GITHUB_TOKEN`, and CI has to be started by
+hand (`gh workflow run ci.yml --ref api-spec-update`).
+
+To set up the app (once):
+
+1. Create a GitHub App owned by the `byteally` organisation (*Organization
+   settings → Developer settings → GitHub Apps → New GitHub App*):
+   - any name, such as `typesafe-sdk-spec-sync`, and the repository URL as
+     the homepage;
+   - under *Webhook*, clear *Active*;
+   - *Repository permissions*: *Contents* and *Pull requests*, both *Read and
+     write*;
+   - *Where can this GitHub App be installed?*: *Only on this account*.
+2. On the app's page, note the *Client ID*, and under *Private keys*
+   generate a key. A `.pem` file downloads.
+3. Install the app (*Install App* in the app's settings) on the `byteally`
+   organisation, for the `typesafe-sdk` repository only.
+4. Store the client ID as a variable and the key as a secret:
+
+   ```sh
+   gh variable set SPEC_SYNC_APP_CLIENT_ID --repo byteally/typesafe-sdk --body <client-id>
+   gh secret set SPEC_SYNC_APP_PRIVATE_KEY --repo byteally/typesafe-sdk < path/to/key.pem
+   ```
+
+   Then delete the downloaded `.pem` file.
+5. Check the setup with `gh workflow run spec-drift.yml --repo byteally/typesafe-sdk`.
+   The *create-github-app-token* and *Identify the app's bot account* steps
+   must succeed. They run on every check, so a revoked key or an uninstalled
+   app makes the daily run fail.
 
 To check by hand:
 

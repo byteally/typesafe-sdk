@@ -5,6 +5,12 @@ name: API specification drift
 # replaces the vendored copy, with a summary of the changes and the list of
 # conformance tests that fail against it: the to-do list for updating the
 # bindings. See MAINTAINING.md.
+#
+# The pull request is opened with a GitHub App token, so that it triggers CI
+# (pull requests opened with GITHUB_TOKEN do not) and is authored by the app's
+# bot account. Configure the app with the SPEC_SYNC_APP_CLIENT_ID repository
+# variable and the SPEC_SYNC_APP_PRIVATE_KEY repository secret. Without them,
+# the workflow falls back to GITHUB_TOKEN.
 
 on:
   schedule:
@@ -20,6 +26,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      # Runs on every check, not only when the specification changed, so that
+      # an expired key or an uninstalled app is noticed straight away.
+      - uses: actions/create-github-app-token@v3
+        if: vars.SPEC_SYNC_APP_CLIENT_ID != ''
+        id: app-token
+        with:
+          client-id: ${{ vars.SPEC_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SPEC_SYNC_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Identify the app's bot account
+        if: steps.app-token.outcome == 'success'
+        id: bot
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          echo "identity=${APP_SLUG}[bot] <${user_id}+${APP_SLUG}[bot]@users.noreply.github.com>" >> "$GITHUB_OUTPUT"
 
       - name: Compare with the published specification
         id: sync
@@ -76,8 +103,9 @@ jobs:
       - uses: peter-evans/create-pull-request@v8
         if: steps.sync.outputs.changed == 'true'
         with:
-          # A token other than GITHUB_TOKEN lets the pull request trigger CI.
-          token: ${{ secrets.SPEC_SYNC_TOKEN || github.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          author: ${{ steps.bot.outputs.identity || 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>' }}
+          committer: ${{ steps.bot.outputs.identity || 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>' }}
           branch: api-spec-update
           delete-branch: true
           commit-message: Update the vendored TypeSafe OpenAPI specification
