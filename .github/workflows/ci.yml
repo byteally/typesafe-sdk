@@ -74,6 +74,11 @@ jobs:
       - name: Install doctest
         run: cabal install doctest --ignore-project --overwrite-policy=always --installdir="$HOME/.local/bin"
 
+      # doctest stands in for GHC below, and cannot compile dependencies
+      # itself, so they must be built with GHC first.
+      - name: Build dependencies
+        run: cabal build all --only-dependencies
+
       - name: Run doctest
         run: |
           for package in typesafe-ai-core typesafe-ai; do

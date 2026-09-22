@@ -211,6 +211,7 @@ Run the documentation examples with
 
 ```sh
 cabal install doctest --ignore-project
+cabal build all --only-dependencies   # doctest cannot build dependencies itself
 cabal repl typesafe-ai-core --with-compiler=doctest --repl-options=-w
 ```
 
