@@ -8,8 +8,8 @@ description:
   answers decode to your own Haskell types, a one-to-one mirror of the
   OpenAPI schemas, and API calls as plain values.
   .
-  This package does no networking, so it can be used with servant, webapi or
-  any other HTTP stack. For a ready-to-use client, depend on @typesafe-ai@.
+  This package does no networking, so it can be used with servant or any
+  other HTTP stack. For a ready-to-use client, depend on @typesafe-ai@.
   .
   Start with "TypeSafe.Core" and "TypeSafe.Question".
   .

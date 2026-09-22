@@ -11,8 +11,8 @@ description:
   retries with exponential backoff that honour @Retry-After@.
   .
   The types, JSON codecs and calls are in @typesafe-ai-core@, which has no
-  HTTP dependency, so they can also be used with servant, webapi or any other
-  HTTP stack.
+  HTTP dependency, so they can also be used with servant or any other HTTP
+  stack.
   .
   Start with "TypeSafe" and "TypeSafe.Tutorial".
   .
