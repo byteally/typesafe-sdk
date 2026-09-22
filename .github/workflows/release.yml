@@ -1,0 +1,78 @@
+name: Release
+
+# Push a tag such as v0.1.0.0 to upload both packages to Hackage as package
+# candidates. Review the candidates on Hackage, then run this workflow by hand
+# with "publish" checked to publish them. See MAINTAINING.md.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the release on Hackage (otherwise upload candidates)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: hackage
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        id: setup
+        with:
+          ghc-version: "9.12"
+          cabal-version: latest
+          cabal-update: true
+
+      - name: Check that the tag matches the package versions
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for package in typesafe-ai-core typesafe-ai; do
+            version="$(sed -n 's/^version: *//p' "$package/$package.cabal")"
+            if [ "$version" != "$tag" ]; then
+              echo "$package is version $version, but the tag is $GITHUB_REF_NAME" >&2
+              exit 1
+            fi
+          done
+
+      - name: Build and test
+        run: |
+          cabal build all
+          cabal test all --test-show-details=direct
+
+      - name: Package
+        run: |
+          for package in typesafe-ai-core typesafe-ai; do
+            (cd "$package" && cabal check)
+          done
+          cabal sdist typesafe-ai-core typesafe-ai
+          cabal haddock typesafe-ai-core typesafe-ai --haddock-for-hackage
+
+      - name: Upload to Hackage
+        env:
+          HACKAGE_TOKEN: ${{ secrets.HACKAGE_TOKEN }}
+          PUBLISH: ${{ inputs.publish && '--publish' || '' }}
+        run: |
+          # typesafe-ai depends on typesafe-ai-core, so the core goes first.
+          for package in typesafe-ai-core typesafe-ai; do
+            cabal upload $PUBLISH --token "$HACKAGE_TOKEN" dist-newstyle/sdist/"$package"-[0-9]*.tar.gz
+            cabal upload $PUBLISH --documentation --token "$HACKAGE_TOKEN" dist-newstyle/"$package"-[0-9]*-docs.tar.gz
+          done
+
+      - name: Create the GitHub release
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(sed -n 's/^version: *//p' typesafe-ai/typesafe-ai.cabal)"
+          # The notes are the changelog section of this version.
+          awk -v v="$version" '$0 ~ "^## " v { found = 1; next } found && /^## / { exit } found' typesafe-ai/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          gh release create "v$version" --title "v$version" --notes-file "$RUNNER_TEMP/notes.md"

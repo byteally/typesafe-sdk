@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: GHC ${{ matrix.ghc }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        ghc: ["9.6", "9.8", "9.10", "9.12", "9.14"]
+        include:
+          - os: macos-latest
+            ghc: "9.12"
+          - os: windows-latest
+            ghc: "9.12"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        id: setup
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: latest
+          cabal-update: true
+
+      - name: Resolve dependencies
+        run: cabal build all --dry-run
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: cabal-${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-${{ hashFiles('dist-newstyle/cache/plan.json') }}
+          restore-keys: cabal-${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-
+
+      - name: Build
+        run: cabal build all
+
+      - name: Test
+        run: cabal test all --test-show-details=direct
+
+      - name: Documentation
+        run: cabal haddock typesafe-ai-core typesafe-ai
+
+  doctest:
+    name: Examples in the documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        id: setup
+        with:
+          ghc-version: "9.12"
+          cabal-version: latest
+          cabal-update: true
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: doctest-${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-${{ hashFiles('**/*.cabal') }}
+          restore-keys: doctest-${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-
+
+      - name: Install doctest
+        run: cabal install doctest --ignore-project --overwrite-policy=always --installdir="$HOME/.local/bin"
+
+      - name: Run doctest
+        run: |
+          for package in typesafe-ai-core typesafe-ai; do
+            cabal repl "$package" --with-compiler="$HOME/.local/bin/doctest" --repl-options=-w
+          done
+
+  hackage:
+    name: Hackage readiness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        id: setup
+        with:
+          ghc-version: "9.12"
+          cabal-version: latest
+          cabal-update: true
+
+      - name: cabal check
+        run: |
+          for package in typesafe-ai-core typesafe-ai; do
+            (cd "$package" && cabal check)
+          done
+
+      - name: Build and test from the source distributions
+        # Catches files missing from extra-source-files, such as the vendored
+        # OpenAPI specification the conformance tests read.
+        run: |
+          cabal sdist typesafe-ai-core typesafe-ai
+          mkdir "$RUNNER_TEMP/sdist"
+          for tarball in dist-newstyle/sdist/*.tar.gz; do
+            tar -xzf "$tarball" -C "$RUNNER_TEMP/sdist"
+          done
+          cd "$RUNNER_TEMP/sdist"
+          printf 'packages: */*.cabal\ntests: True\n' > cabal.project
+          cabal build all
+          cabal test all --test-show-details=direct

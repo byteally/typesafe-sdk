@@ -1,0 +1,87 @@
+name: API specification drift
+
+# Checks every day whether TypeSafe has published a new version of its OpenAPI
+# specification. When it has, this opens (or updates) a pull request that
+# replaces the vendored copy, with a summary of the changes and the list of
+# conformance tests that fail against it: the to-do list for updating the
+# bindings. See MAINTAINING.md.
+
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare with the published specification
+        id: sync
+        run: |
+          if scripts/sync-spec.sh --summary "$RUNNER_TEMP/summary.md"; then
+            if [ -s "$RUNNER_TEMP/summary.md" ]; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            exit 1
+          fi
+
+      - uses: haskell-actions/setup@v2
+        if: steps.sync.outputs.changed == 'true'
+        id: setup
+        with:
+          ghc-version: "9.12"
+          cabal-version: latest
+          cabal-update: true
+
+      - uses: actions/cache@v4
+        if: steps.sync.outputs.changed == 'true'
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: drift-${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-${{ hashFiles('**/*.cabal') }}
+          restore-keys: drift-${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-
+
+      - name: Run the conformance tests against the new specification
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          summary="$RUNNER_TEMP/summary.md"
+          set +e
+          cabal test typesafe-ai-core --test-show-details=direct > "$RUNNER_TEMP/tests.log" 2>&1
+          status=$?
+          set -e
+          {
+            echo "## Conformance tests"
+            echo
+            if [ "$status" -eq 0 ]; then
+              echo "All tests pass against the new specification. Review the changes above, bump \`apiSpecVersion\` if the version changed, and add typed support for any new features."
+            else
+              echo "These tests fail against the new specification. Each one names something the bindings do not cover yet:"
+              echo
+              echo '```'
+              grep -E 'FAIL|expected:|but got:|failed' "$RUNNER_TEMP/tests.log" | head -100
+              echo '```'
+            fi
+            echo
+            echo "See MAINTAINING.md for how to update the bindings."
+          } >> "$summary"
+
+      - uses: peter-evans/create-pull-request@v7
+        if: steps.sync.outputs.changed == 'true'
+        with:
+          # A token other than GITHUB_TOKEN lets the pull request trigger CI.
+          token: ${{ secrets.SPEC_SYNC_TOKEN || github.token }}
+          branch: api-spec-update
+          delete-branch: true
+          commit-message: Update the vendored TypeSafe OpenAPI specification
+          title: Update the vendored TypeSafe OpenAPI specification
+          body-path: ${{ runner.temp }}/summary.md
+          labels: api-update
+          add-paths: typesafe-ai-core/spec/openapi.json
