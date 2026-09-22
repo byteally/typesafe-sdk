@@ -1,0 +1,54 @@
+cabal-version: 3.0
+name:          typesafe-ai-examples
+version:       0.1.0.0
+synopsis:      Runnable examples for the typesafe-ai package
+description:
+  Example programs for @typesafe-ai@. They are built by CI so that they keep
+  compiling, but this package is not published to Hackage.
+  .
+  Run one with an API key, for example:
+  .
+  > TYPESAFE_API_KEY=... cabal run typesafe-quickstart
+
+license:       BSD-3-Clause
+author:        Magesh B
+maintainer:    magesh85@gmail.com
+category:      AI
+build-type:    Simple
+
+common example
+  default-language: Haskell2010
+  hs-source-dirs:   .
+  ghc-options:      -Wall -Wcompat -threaded -rtsopts
+  build-depends:
+    , base         >=4.18 && <5
+    , typesafe-ai
+
+executable typesafe-quickstart
+  import:  example
+  main-is: Quickstart.hs
+
+executable typesafe-fan-out
+  import:        example
+  main-is:       FanOut.hs
+  build-depends: aeson, text
+
+executable typesafe-confidence-routing
+  import:        example
+  main-is:       ConfidenceRouting.hs
+  build-depends: text
+
+executable typesafe-concurrent
+  import:        example
+  main-is:       Concurrent.hs
+  build-depends: async >=2.2 && <2.3
+
+executable typesafe-models
+  import:        example
+  main-is:       Models.hs
+  build-depends: text
+
+executable typesafe-forward-compatibility
+  import:        example
+  main-is:       ForwardCompatibility.hs
+  build-depends: aeson, bytestring, containers

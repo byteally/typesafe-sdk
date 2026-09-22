@@ -1,0 +1,12 @@
+packages:
+  typesafe-ai-core
+  typesafe-ai
+  examples
+
+tests: True
+
+package typesafe-ai-core
+  ghc-options: -Werror
+
+package typesafe-ai
+  ghc-options: -Werror
