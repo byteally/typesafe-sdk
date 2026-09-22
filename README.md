@@ -128,21 +128,13 @@ and still use typed questions with `systemOneRequest` and
 
 ### Why `http-client`
 
-We considered `http-client`, `req` and `wreq`:
-
-- **`http-client` + `http-client-tls`** is the foundation the others (and
-  servant-client) are built on. It is small, stable and maintained, and
-  gives direct control over what an SDK needs: a shared, thread-safe
-  connection `Manager`, per-request timeouts, streaming bodies and exception
-  types. Applications that already use servant-client or `http-conduit`
-  already have it, and can pass their `Manager` to `newClientWith`.
-- **`req`** has a pleasant type-safe API for *applications*, but an SDK
-  exposes its own typed API anyway, so `req`'s URL and option types would
-  stay internal. It would add dependencies (`modern-uri`, `retry`,
-  `monad-control`, …) and its `MonadHttp` class and retry machinery, which
-  overlap with the SDK's own.
-- **`wreq`** depends on `lens` and sees little maintenance. It is a poor
-  choice of dependency for a library.
+The client is built on `http-client` and `http-client-tls`, the foundation
+that servant-client and most other Haskell HTTP libraries are built on. It is
+small, stable and maintained, and gives direct control over what an SDK
+needs: a shared, thread-safe connection `Manager`, per-request timeouts,
+streaming bodies and exception types. Applications that already use
+servant-client or `http-conduit` already have it, and can pass their
+`Manager` to `newClientWith`.
 
 The SDK talks to two endpoints with JSON bodies, so the layer over
 `http-client` is small. Because the transport is separate from everything
