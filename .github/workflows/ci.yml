@@ -74,15 +74,13 @@ jobs:
       - name: Install doctest
         run: cabal install doctest --ignore-project --overwrite-policy=always --installdir="$HOME/.local/bin"
 
-      # doctest stands in for GHC below, and cannot compile dependencies
-      # itself, so they must be built with GHC first.
-      - name: Build dependencies
-        run: cabal build all --only-dependencies
-
+      # --with-repl (cabal 3.16 or later) runs doctest in place of GHCi while
+      # GHC still builds the dependencies. --with-compiler would make cabal
+      # rebuild the local typesafe-ai-core library with doctest, which fails.
       - name: Run doctest
         run: |
           for package in typesafe-ai-core typesafe-ai; do
-            cabal repl "$package" --with-compiler="$HOME/.local/bin/doctest" --repl-options=-w
+            cabal repl "$package" --with-repl="$HOME/.local/bin/doctest" --repl-options=-w
           done
 
   hackage:

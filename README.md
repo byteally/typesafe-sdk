@@ -207,12 +207,13 @@ scripts/sync-spec.sh --check      # is the vendored specification current?
 ```
 
 Run the documentation examples with
-[doctest](https://github.com/sol/doctest):
+[doctest](https://github.com/sol/doctest) (needs cabal 3.16 or later for
+`--with-repl`):
 
 ```sh
 cabal install doctest --ignore-project
-cabal build all --only-dependencies   # doctest cannot build dependencies itself
-cabal repl typesafe-ai-core --with-compiler=doctest --repl-options=-w
+cabal repl typesafe-ai-core --with-repl=doctest --repl-options=-w
+cabal repl typesafe-ai --with-repl=doctest --repl-options=-w
 ```
 
 ## License
