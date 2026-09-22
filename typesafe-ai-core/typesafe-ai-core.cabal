@@ -20,7 +20,7 @@ bug-reports:        https://github.com/byteally/typesafe-sdk/issues
 license:            BSD-3-Clause
 license-file:       LICENSE
 author:             Magesh B
-maintainer:         magesh@byteally.com
+maintainer:         magesh85@gmail.com
 copyright:          2026 byteally
 category:           AI, Web, API
 build-type:         Simple
