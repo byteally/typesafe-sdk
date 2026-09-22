@@ -5,8 +5,8 @@ One API: typed Noul, Choice and Score questions whose answers decode to your
 own Haskell types, a one-to-one mirror of the OpenAPI schemas with JSON
 codecs, and API calls as plain values.
 
-This package does no networking. Use it with servant, webapi or any other
-HTTP stack. For a ready-to-use client, depend on
+This package does no networking. Use it with servant or any other HTTP
+stack. For a ready-to-use client, depend on
 [`typesafe-ai`](https://hackage.haskell.org/package/typesafe-ai) instead; it
 re-exports everything here.
 

@@ -26,7 +26,7 @@
 --
 -- ["TypeSafe.Error"], ["TypeSafe.Retry"] errors and the retry policy.
 --
--- = With servant, webapi or another HTTP library
+-- = With servant or another HTTP library
 --
 -- The wire types have 'Data.Aeson.ToJSON' and 'Data.Aeson.FromJSON'
 -- instances, so describing the API in another framework takes a few lines.

@@ -274,7 +274,7 @@ evaluation rid response a =
     }
 
 -- | Build the wire request for typed questions, for sending with your own
--- HTTP client (servant, webapi, …). Pair it with 'decodeEvaluation'.
+-- HTTP client, such as servant. Pair it with 'decodeEvaluation'.
 systemOneRequest :: ModelName -> Content -> Questions a -> Either RequestError SystemOneRequest
 systemOneRequest model state questions =
   SystemOneRequest state model <$> renderQuestions questions

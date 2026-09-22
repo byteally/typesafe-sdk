@@ -56,7 +56,7 @@ answered in parallel.
 | [`typesafe-ai-core`](typesafe-ai-core) | Typed questions and answers, the OpenAPI schemas as Haskell types with JSON codecs, API calls as values, errors, the retry policy. **No HTTP library.** | `aeson`, `http-types`, boot packages |
 
 Most applications depend on `typesafe-ai` only. Depend on `typesafe-ai-core`
-alone to use your own HTTP stack (servant, webapi, …).
+alone to use your own HTTP stack, such as servant.
 
 ## Installing
 
@@ -108,7 +108,7 @@ from an `HttpResponse`. The bundled transport uses `http-client`. The retry
 policy, error classification and header handling live in the core, so
 every transport behaves the same way.
 
-To use servant, webapi or anything else, you can either describe the API
+To use servant or anything else, you can either describe the API
 over the wire types:
 
 ```haskell

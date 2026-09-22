@@ -19,7 +19,7 @@
 -- values from typed questions and decodes the answers into your own types.
 -- Reach for the wire types when you want to
 --
--- * talk to the API through your own HTTP stack (servant, webapi, …) and only
+-- * talk to the API through your own HTTP stack, such as servant, and only
 --   borrow the JSON codecs,
 -- * log, store or replay raw requests and responses, or
 -- * use an API feature before this SDK has typed support for it (see
